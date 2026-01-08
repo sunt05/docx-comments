@@ -1,0 +1,66 @@
+[project]
+name = "docx-comments"
+version = "0.1.0"
+description = "Complete Word document comment manipulation with threading and Word Online compatibility"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Ting Sun", email = "ting.sun@ucl.ac.uk"}
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Office Suites",
+    "Topic :: Text Processing :: Markup :: XML",
+]
+keywords = ["docx", "word", "comments", "ooxml", "python-docx"]
+
+dependencies = [
+    "python-docx>=1.0.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sunt05/docx-comments"
+Repository = "https://github.com/sunt05/docx-comments"
+Issues = "https://github.com/sunt05/docx-comments/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docx_comments"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

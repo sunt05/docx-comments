@@ -1,0 +1,68 @@
+"""Data models for comment information."""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
+
+
+@dataclass
+class CommentInfo:
+    """Information about a single comment."""
+
+    comment_id: str
+    """Unique comment ID (w:id attribute)."""
+
+    para_id: str
+    """Paragraph ID linking to extended/ids parts (w14:paraId)."""
+
+    text: str
+    """Comment text content."""
+
+    author: str
+    """Comment author name."""
+
+    initials: Optional[str] = None
+    """Author initials (optional)."""
+
+    timestamp: Optional[datetime] = None
+    """Comment creation timestamp."""
+
+    parent_para_id: Optional[str] = None
+    """Parent paragraph ID for replies (w15:paraIdParent)."""
+
+    is_resolved: bool = False
+    """Whether comment is marked as done (w15:done)."""
+
+    durable_id: Optional[str] = None
+    """Durable ID for persistence (w16cid:durableId)."""
+
+    @property
+    def is_reply(self) -> bool:
+        """Check if this comment is a reply to another comment."""
+        return self.parent_para_id is not None
+
+
+@dataclass
+class CommentThread:
+    """A comment thread with root comment and replies."""
+
+    root: CommentInfo
+    """The root (parent) comment of the thread."""
+
+    replies: list[CommentInfo] = field(default_factory=list)
+    """List of reply comments in chronological order."""
+
+    @property
+    def all_comments(self) -> list[CommentInfo]:
+        """All comments in the thread (root + replies)."""
+        return [self.root] + self.replies
+
+    @property
+    def is_resolved(self) -> bool:
+        """Check if the thread is resolved (root comment is done)."""
+        return self.root.is_resolved
+
+    @property
+    def reply_count(self) -> int:
+        """Number of replies in the thread."""
+        return len(self.replies)
