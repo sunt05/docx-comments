@@ -240,7 +240,8 @@ class CommentManager:
         initials from existing comments by that author.
 
         Returns:
-            Tuple of (author_name, initials). Initials may be None if
+            Tuple of (author_name, initials). author_name may be empty if
+            no author is set in document properties. Initials may be None if
             the document owner hasn't made any comments yet.
         """
         author = self._document.core_properties.author or ""

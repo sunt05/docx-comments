@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from lxml import etree
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
 
 if TYPE_CHECKING:
     from docx import Document
@@ -51,6 +53,7 @@ class CommentsPart:
 
     def __init__(self, document: Document) -> None:
         self._document = document
+        self._xml_cache: Optional[etree._Element] = None
 
     def _get_part(self):
         """Get the comments part from document relationships."""
@@ -66,9 +69,6 @@ class CommentsPart:
 
     def _create_part(self) -> None:
         """Create a new comments.xml part."""
-        from docx.opc.packuri import PackURI
-        from docx.opc.part import Part
-
         # Create XML content with required namespaces
         nsmap = {
             "w": NS_W,
@@ -117,7 +117,8 @@ class CommentsPart:
                 elem = part.element
                 if elem is not None:
                     return elem
-            except Exception:
+            except (AttributeError, TypeError, ValueError, etree.XMLSyntaxError):
+                # Best-effort fallback for python-docx element access.
                 pass
 
         # Fallback for XmlPart with private _element (ensure initialized)
@@ -130,7 +131,7 @@ class CommentsPart:
             return part._element
 
         # Generic Part - need to parse blob and maintain cache
-        if not hasattr(self, "_xml_cache") or self._xml_cache is None:
+        if self._xml_cache is None:
             self._xml_cache = etree.fromstring(part.blob)
         return self._xml_cache
 
@@ -221,9 +222,6 @@ class CommentsExtendedPart:
 
         # Add part to document
         # Note: This requires accessing python-docx internals
-        from docx.opc.packuri import PackURI
-        from docx.opc.part import Part
-
         part = Part(
             PackURI("/word/commentsExtended.xml"),
             CT_COMMENTS_EXT,
@@ -353,9 +351,6 @@ class CommentsIdsPart:
         )
 
         # Add part to document
-        from docx.opc.packuri import PackURI
-        from docx.opc.part import Part
-
         part = Part(
             PackURI("/word/commentsIds.xml"),
             CT_COMMENTS_IDS,
