@@ -240,9 +240,9 @@ class CommentManager:
         initials from existing comments by that author.
 
         Returns:
-            Tuple of (author_name, initials). author_name may be empty if
-            no author is set in document properties. Initials may be None if
-            the document owner hasn't made any comments yet.
+            Tuple of (author_name, initials). author_name is always a string
+            but may be empty ("") if no author is set in document properties.
+            Initials may be None if the document owner hasn't made any comments.
         """
         author = self._document.core_properties.author or ""
         if not author:
@@ -339,7 +339,6 @@ class CommentManager:
         """
         # Find parent comment's para_id
         parent_para_id = None
-        parent_paragraph = None
 
         for comment in self.list_comments():
             if comment.comment_id == parent_id:

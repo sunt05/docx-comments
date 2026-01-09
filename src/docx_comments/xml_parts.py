@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from lxml import etree
 from docx.opc.packuri import PackURI
 from docx.opc.part import Part
+from lxml import etree
 
 if TYPE_CHECKING:
     from docx import Document
@@ -53,7 +53,7 @@ class CommentsPart:
 
     def __init__(self, document: Document) -> None:
         self._document = document
-        self._xml_cache: Optional[etree._Element] = None
+        self._xml: Optional[etree._Element] = None
 
     def _get_part(self):
         """Get the comments part from document relationships."""
@@ -126,14 +126,17 @@ class CommentsPart:
             if getattr(part, "_element", None) is None:
                 try:
                     part._element = etree.fromstring(part.blob)
-                except Exception:
+                except (etree.XMLSyntaxError, AttributeError, TypeError):
+                    # XMLSyntaxError: malformed XML in blob
+                    # AttributeError: part lacks blob attribute
+                    # TypeError: blob is None or wrong type
                     return etree.Element(_qn(NS_W, "comments"))
             return part._element
 
         # Generic Part - need to parse blob and maintain cache
-        if self._xml_cache is None:
-            self._xml_cache = etree.fromstring(part.blob)
-        return self._xml_cache
+        if self._xml is None:
+            self._xml = etree.fromstring(part.blob)
+        return self._xml
 
     def _save(self) -> None:
         """Save changes back to the part.
@@ -150,9 +153,9 @@ class CommentsPart:
             return
 
         # Generic Part - update _blob from cached xml
-        if hasattr(self, "_xml_cache") and self._xml_cache is not None:
+        if self._xml is not None:
             part._blob = etree.tostring(
-                self._xml_cache,
+                self._xml,
                 xml_declaration=True,
                 encoding="UTF-8",
                 standalone="yes",
