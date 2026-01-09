@@ -111,8 +111,22 @@ class CommentsPart:
             # Shouldn't happen after ensure_exists
             return etree.Element(_qn(NS_W, "comments"))
 
-        # Check if it's an XmlPart (has _element attribute)
+        # Prefer public accessor when available (ensures _element initialized)
+        if hasattr(part, "element"):
+            try:
+                elem = part.element
+                if elem is not None:
+                    return elem
+            except Exception:
+                pass
+
+        # Fallback for XmlPart with private _element (ensure initialized)
         if hasattr(part, "_element"):
+            if getattr(part, "_element", None) is None:
+                try:
+                    part._element = etree.fromstring(part.blob)
+                except Exception:
+                    return etree.Element(_qn(NS_W, "comments"))
             return part._element
 
         # Generic Part - need to parse blob and maintain cache

@@ -223,8 +223,13 @@ class CommentManager:
         """
         authors: dict[str, str] = {}
         for comment in self.list_comments():
-            if comment.author and comment.author not in authors:
+            if not comment.author:
+                continue
+            if comment.author not in authors:
                 authors[comment.author] = comment.initials or ""
+            elif not authors[comment.author] and comment.initials:
+                # Prefer first non-empty initials when available
+                authors[comment.author] = comment.initials
         return authors
 
     def get_document_author(self) -> tuple[str, Optional[str]]:
