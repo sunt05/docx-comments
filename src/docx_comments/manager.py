@@ -214,6 +214,44 @@ class CommentManager:
 
         return threads
 
+    def get_authors(self) -> dict[str, str]:
+        """
+        Get all unique authors who have commented on this document.
+
+        Returns:
+            Dict mapping author name to initials, e.g. {"Sun, Ting": "ST"}
+        """
+        authors: dict[str, str] = {}
+        for comment in self.list_comments():
+            if comment.author and comment.author not in authors:
+                authors[comment.author] = comment.initials or ""
+        return authors
+
+    def get_document_author(self) -> tuple[str, Optional[str]]:
+        """
+        Get the document owner's name and initials.
+
+        Uses document core properties for the author name, then looks up
+        initials from existing comments by that author.
+
+        Returns:
+            Tuple of (author_name, initials). Initials may be None if
+            the document owner hasn't made any comments yet.
+        """
+        author = self._document.core_properties.author or ""
+        if not author:
+            # Fallback to last_modified_by
+            author = self._document.core_properties.last_modified_by or ""
+
+        # Look for initials in existing comments
+        initials = None
+        for comment in self.list_comments():
+            if comment.author == author and comment.initials:
+                initials = comment.initials
+                break
+
+        return author, initials
+
     def add_comment(
         self,
         paragraph: Paragraph,
