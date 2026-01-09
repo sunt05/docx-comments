@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, Iterator, Optional
 
 from lxml import etree
 
+from docx_comments.anchors import CommentAnchor
 from docx_comments.models import CommentInfo, CommentThread
 from docx_comments.xml_parts import (
     CommentsExtendedPart,
     CommentsIdsPart,
+    CommentsPart,
     ensure_comment_parts,
 )
-from docx_comments.anchors import CommentAnchor
 
 if TYPE_CHECKING:
     from docx import Document
@@ -87,21 +88,26 @@ class CommentManager:
             document: A python-docx Document instance.
         """
         self._document = document
+        self._comments_handler: Optional[CommentsPart] = None
         self._ensure_parts()
 
     def _ensure_parts(self) -> None:
         """Ensure all required comment parts exist in the document."""
         ensure_comment_parts(self._document)
-
-    @property
-    def _comments_part(self):
-        """Get the WordprocessingCommentsPart."""
-        return self._document.part.comments_part
+        # Cache the comments part handler
+        self._comments_handler = CommentsPart(self._document)
 
     @property
     def _comments_xml(self) -> etree._Element:
         """Get the comments.xml root element."""
-        return self._comments_part._element
+        if self._comments_handler is None:
+            self._comments_handler = CommentsPart(self._document)
+        return self._comments_handler.xml
+
+    def _save_comments(self) -> None:
+        """Save changes to comments.xml."""
+        if self._comments_handler is not None:
+            self._comments_handler._save()
 
     def list_comments(self) -> Iterator[CommentInfo]:
         """
@@ -132,15 +138,15 @@ class CommentManager:
             if para is not None:
                 para_id = para.get(_qn(NS_W14, "paraId"))
 
-            # Parse timestamp
+            # Parse timestamp (OOXML uses UTC, normalize all to tz-aware)
             timestamp = None
             if date_str:
                 try:
-                    # Handle ISO format with or without timezone
                     if date_str.endswith("Z"):
                         timestamp = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                     else:
-                        timestamp = datetime.fromisoformat(date_str)
+                        # Assume UTC if no timezone specified
+                        timestamp = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
                 except ValueError:
                     pass
 
@@ -201,8 +207,9 @@ class CommentManager:
         threads = []
         for para_id, root in roots.items():
             replies = replies_by_parent.get(para_id, [])
-            # Sort replies by timestamp
-            replies.sort(key=lambda c: c.timestamp or datetime.min)
+            # Sort replies by timestamp (use tz-aware min for comparison)
+            min_dt = datetime.min.replace(tzinfo=timezone.utc)
+            replies.sort(key=lambda c: c.timestamp or min_dt)
             threads.append(CommentThread(root=root, replies=replies))
 
         return threads
@@ -405,3 +412,6 @@ class CommentManager:
         run2.set(_qn(NS_W, "rsidRPr"), rsid_rpr)
         t = etree.SubElement(run2, _qn(NS_W, "t"))
         t.text = text
+
+        # Save changes to the part
+        self._save_comments()

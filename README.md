@@ -85,13 +85,15 @@ This module manages four XML parts:
 # Clone and setup
 git clone https://github.com/sunt05/docx-comments.git
 cd docx-comments
-uv venv && uv pip install -e ".[dev]"
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
 
 # Run tests
 pytest
 
-# Type checking
-mypy src/docx_comments
+# Linting
+ruff check src/docx_comments
 ```
 
 ## License

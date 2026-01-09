@@ -1,4 +1,4 @@
-"""Handlers for additional XML parts: commentsExtended.xml and commentsIds.xml."""
+"""Handlers for XML parts: comments.xml, commentsExtended.xml, and commentsIds.xml."""
 
 from __future__ import annotations
 
@@ -11,11 +11,14 @@ if TYPE_CHECKING:
 
 
 # OOXML Namespaces
+NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 NS_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 
 # Relationship types
+REL_COMMENTS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
 REL_COMMENTS_EXT = (
     "http://schemas.microsoft.com/office/2011/relationships/commentsExtended"
 )
@@ -24,6 +27,7 @@ REL_COMMENTS_IDS = (
 )
 
 # Content types
+CT_COMMENTS = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
 CT_COMMENTS_EXT = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"
 )
@@ -37,14 +41,122 @@ def _qn(ns: str, name: str) -> str:
     return f"{{{ns}}}{name}"
 
 
+class CommentsPart:
+    """Handler for word/comments.xml part.
+
+    Note: python-docx loads comments.xml as an XmlPart subclass (CommentsPart)
+    which uses _element for serialization, not _blob. We must work with
+    part._element directly to persist changes.
+    """
+
+    def __init__(self, document: Document) -> None:
+        self._document = document
+
+    def _get_part(self):
+        """Get the comments part from document relationships."""
+        for rel in self._document.part.rels.values():
+            if REL_COMMENTS in rel.reltype:
+                return rel.target_part
+        return None
+
+    def ensure_exists(self) -> None:
+        """Ensure the comments part exists, creating if needed."""
+        if self._get_part() is None:
+            self._create_part()
+
+    def _create_part(self) -> None:
+        """Create a new comments.xml part."""
+        from docx.opc.packuri import PackURI
+        from docx.opc.part import Part
+
+        # Create XML content with required namespaces
+        nsmap = {
+            "w": NS_W,
+            "w14": NS_W14,
+            "w15": NS_W15,
+            "mc": NS_MC,
+        }
+        root = etree.Element(
+            _qn(NS_W, "comments"),
+            nsmap=nsmap,
+        )
+        root.set(_qn(NS_MC, "Ignorable"), "w14 w15")
+
+        xml_content = etree.tostring(
+            root,
+            xml_declaration=True,
+            encoding="UTF-8",
+            standalone="yes",
+        )
+
+        # Create generic part (python-docx will load it as XmlPart on next open)
+        part = Part(
+            PackURI("/word/comments.xml"),
+            CT_COMMENTS,
+            xml_content,
+            self._document.part.package,
+        )
+        self._document.part.relate_to(part, REL_COMMENTS)
+
+    @property
+    def xml(self) -> etree._Element:
+        """Get the XML root element.
+
+        Handles two cases:
+        - XmlPart (from existing document): use part._element directly
+        - Generic Part (newly created): parse and cache from blob
+        """
+        part = self._get_part()
+        if part is None:
+            # Shouldn't happen after ensure_exists
+            return etree.Element(_qn(NS_W, "comments"))
+
+        # Check if it's an XmlPart (has _element attribute)
+        if hasattr(part, "_element"):
+            return part._element
+
+        # Generic Part - need to parse blob and maintain cache
+        if not hasattr(self, "_xml_cache") or self._xml_cache is None:
+            self._xml_cache = etree.fromstring(part.blob)
+        return self._xml_cache
+
+    def _save(self) -> None:
+        """Save changes back to the part.
+
+        - XmlPart: changes to _element persist automatically
+        - Generic Part: need to update _blob
+        """
+        part = self._get_part()
+        if part is None:
+            return
+
+        # XmlPart doesn't need explicit save
+        if hasattr(part, "_element"):
+            return
+
+        # Generic Part - update _blob from cached xml
+        if hasattr(self, "_xml_cache") and self._xml_cache is not None:
+            part._blob = etree.tostring(
+                self._xml_cache,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            )
+
+
 def ensure_comment_parts(document: Document) -> None:
     """
     Ensure all required comment parts exist in the document.
 
     Creates:
+    - comments.xml if missing
     - commentsExtended.xml if missing
     - commentsIds.xml if missing
     """
+    # Ensure comments.xml (main comments part)
+    comments_part = CommentsPart(document)
+    comments_part.ensure_exists()
+
     # Ensure commentsExtended.xml
     ext_part = CommentsExtendedPart(document)
     ext_part.ensure_exists()
@@ -95,8 +207,8 @@ class CommentsExtendedPart:
 
         # Add part to document
         # Note: This requires accessing python-docx internals
-        from docx.opc.part import Part
         from docx.opc.packuri import PackURI
+        from docx.opc.part import Part
 
         part = Part(
             PackURI("/word/commentsExtended.xml"),
@@ -227,8 +339,8 @@ class CommentsIdsPart:
         )
 
         # Add part to document
-        from docx.opc.part import Part
         from docx.opc.packuri import PackURI
+        from docx.opc.part import Part
 
         part = Part(
             PackURI("/word/commentsIds.xml"),
