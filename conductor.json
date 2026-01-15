@@ -1,0 +1,7 @@
+{
+    "scripts": {
+        "setup": "uv sync --all-extras",
+        "run": "uv run pytest",
+        "archive": "cd $CONDUCTOR_ROOT_PATH && git fetch origin && git merge origin/main"
+    }
+}
