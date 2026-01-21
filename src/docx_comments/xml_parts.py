@@ -17,6 +17,7 @@ NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 NS_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
+NS_W16CEX = "http://schemas.microsoft.com/office/word/2018/wordml/cex"
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 
 # Relationship types
@@ -27,6 +28,9 @@ REL_COMMENTS_EXT = (
 REL_COMMENTS_IDS = (
     "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds"
 )
+REL_COMMENTS_EXTENSIBLE = (
+    "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible"
+)
 
 # Content types
 CT_COMMENTS = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
@@ -35,6 +39,9 @@ CT_COMMENTS_EXT = (
 )
 CT_COMMENTS_IDS = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml"
+)
+CT_COMMENTS_EXTENSIBLE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml"
 )
 
 
@@ -170,6 +177,7 @@ def ensure_comment_parts(document: Document) -> None:
     - comments.xml if missing
     - commentsExtended.xml if missing
     - commentsIds.xml if missing
+    - commentsExtensible.xml if missing
     """
     # Ensure comments.xml (main comments part)
     comments_part = CommentsPart(document)
@@ -182,6 +190,10 @@ def ensure_comment_parts(document: Document) -> None:
     # Ensure commentsIds.xml
     ids_part = CommentsIdsPart(document)
     ids_part.ensure_exists()
+
+    # Ensure commentsExtensible.xml (modern comments metadata)
+    extensible_part = CommentsExtensiblePart(document)
+    extensible_part.ensure_exists()
 
 
 class CommentsExtendedPart:
@@ -290,11 +302,23 @@ class CommentsExtendedPart:
             parent_para_id: Paragraph ID of parent (for replies).
             done: Whether comment is resolved.
         """
-        elem = etree.SubElement(self.xml, _qn(NS_W15, "commentEx"))
+        elem = etree.Element(_qn(NS_W15, "commentEx"))
         elem.set(_qn(NS_W15, "paraId"), para_id)
         elem.set(_qn(NS_W15, "done"), "1" if done else "0")
         if parent_para_id:
             elem.set(_qn(NS_W15, "paraIdParent"), parent_para_id)
+        inserted = False
+        if parent_para_id:
+            for existing in self.xml:
+                if (
+                    etree.QName(existing).localname == "commentEx"
+                    and existing.get(_qn(NS_W15, "paraId")) == parent_para_id
+                ):
+                    existing.addnext(elem)
+                    inserted = True
+                    break
+        if not inserted:
+            self.xml.append(elem)
         self._save()
 
     def set_done(self, para_id: str, done: bool) -> None:
@@ -312,6 +336,121 @@ class CommentsExtendedPart:
                     self._save()
                     return
         raise ValueError(f"Comment with para_id {para_id} not found in commentsExtended")
+
+
+class CommentsExtensiblePart:
+    """Handler for word/commentsExtensible.xml part."""
+
+    def __init__(self, document: Document) -> None:
+        self._document = document
+        self._xml: Optional[etree._Element] = None
+
+    def _get_part(self):
+        """Get the commentsExtensible part from document relationships."""
+        doc_part = self._document.part
+        for rel in doc_part.rels.values():
+            if "commentsExtensible" in rel.reltype:
+                return rel.target_part
+        package = getattr(doc_part, "package", None)
+        if package is not None:
+            for part in getattr(package, "parts", []):
+                if str(part.partname) == "/word/commentsExtensible.xml":
+                    return part
+        return None
+
+    def ensure_exists(self) -> None:
+        """Ensure the commentsExtensible part exists, creating if needed."""
+        if self._get_part() is None:
+            self._create_part()
+
+    def _create_part(self) -> None:
+        """Create a new commentsExtensible.xml part."""
+        nsmap = {
+            "mc": NS_MC,
+            "w16cex": NS_W16CEX,
+        }
+        root = etree.Element(
+            _qn(NS_W16CEX, "commentsExtensible"),
+            nsmap=nsmap,
+        )
+        root.set(_qn(NS_MC, "Ignorable"), "w16cex")
+
+        xml_content = etree.tostring(
+            root,
+            xml_declaration=True,
+            encoding="UTF-8",
+            standalone="yes",
+        )
+
+        part = Part(
+            PackURI("/word/commentsExtensible.xml"),
+            CT_COMMENTS_EXTENSIBLE,
+            xml_content,
+            self._document.part.package,
+        )
+        self._document.part.relate_to(part, REL_COMMENTS_EXTENSIBLE)
+
+    @property
+    def xml(self) -> etree._Element:
+        """Get the XML root element."""
+        if self._xml is None:
+            part = self._get_part()
+            if part:
+                self._xml = etree.fromstring(part.blob)
+            else:
+                self._xml = etree.Element(_qn(NS_W16CEX, "commentsExtensible"))
+        return self._xml
+
+    def _save(self) -> None:
+        """Save changes back to the part."""
+        part = self._get_part()
+        if part:
+            part._blob = etree.tostring(
+                self.xml,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            )
+
+    def get_extensible_info(self) -> dict[str, dict]:
+        """
+        Get metadata entries from commentsExtensible.xml.
+
+        Returns:
+            Dict mapping durable_id to {"date_utc": str|None}.
+        """
+        result = {}
+        for elem in self.xml:
+            if etree.QName(elem).localname == "commentExtensible":
+                durable_id = elem.get(_qn(NS_W16CEX, "durableId"))
+                date_utc = elem.get(_qn(NS_W16CEX, "dateUtc"))
+                if durable_id:
+                    result[durable_id] = {"date_utc": date_utc}
+        return result
+
+    def add_comment_extensible(self, durable_id: str, date_utc: Optional[str] = None) -> None:
+        """
+        Add or update a commentExtensible entry.
+
+        Args:
+            durable_id: Durable ID for the comment.
+            date_utc: Optional UTC timestamp (ISO8601, Z-terminated).
+        """
+        for elem in self.xml:
+            if (
+                etree.QName(elem).localname == "commentExtensible"
+                and elem.get(_qn(NS_W16CEX, "durableId")) == durable_id
+            ):
+                if date_utc and not elem.get(_qn(NS_W16CEX, "dateUtc")):
+                    elem.set(_qn(NS_W16CEX, "dateUtc"), date_utc)
+                    self._save()
+                return
+
+        elem = etree.SubElement(self.xml, _qn(NS_W16CEX, "commentExtensible"))
+        elem.set(_qn(NS_W16CEX, "durableId"), durable_id)
+        if date_utc:
+            elem.set(_qn(NS_W16CEX, "dateUtc"), date_utc)
+        self._save()
 
 
 class CommentsIdsPart:
