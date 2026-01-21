@@ -14,7 +14,6 @@ from lxml import etree
 from docx_comments.models import PersonInfo
 
 
-
 def _system_office_user_info() -> Tuple[Optional[str], Optional[str]]:
     if sys.platform == "darwin":
         return _macos_office_user_info()
