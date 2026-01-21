@@ -243,7 +243,6 @@ toml = [
 
 [[package]]
 name = "docx-comments"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "lxml" },
