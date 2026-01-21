@@ -43,6 +43,25 @@ class CommentInfo:
 
 
 @dataclass
+class PersonInfo:
+    """Information about a person entry in people.xml."""
+
+    author: str
+    """Person author name (w15:person/@w15:author)."""
+
+    provider_id: Optional[str] = None
+    """Presence provider ID (w15:presenceInfo/@w15:providerId)."""
+
+    user_id: Optional[str] = None
+    """Presence user ID (w15:presenceInfo/@w15:userId)."""
+
+    @property
+    def has_presence(self) -> bool:
+        """Check if presence metadata is present."""
+        return bool(self.provider_id and self.user_id)
+
+
+@dataclass
 class CommentThread:
     """A comment thread with root comment and replies."""
 

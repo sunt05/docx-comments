@@ -9,7 +9,7 @@ This module provides full OOXML comment support including:
 """
 
 from docx_comments.manager import CommentManager
-from docx_comments.models import CommentInfo, CommentThread
+from docx_comments.models import CommentInfo, CommentThread, PersonInfo
 
 __version__ = "0.1.0"
-__all__ = ["CommentManager", "CommentThread", "CommentInfo"]
+__all__ = ["CommentManager", "CommentThread", "CommentInfo", "PersonInfo"]

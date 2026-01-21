@@ -1,4 +1,4 @@
-"""Handlers for XML parts: comments.xml, commentsExtended.xml, and commentsIds.xml."""
+"""Handlers for XML parts: comments.xml, commentsExtended.xml, commentsIds.xml, and people.xml."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Optional
 from docx.opc.packuri import PackURI
 from docx.opc.part import Part
 from lxml import etree
+
+from docx_comments.models import PersonInfo
 
 if TYPE_CHECKING:
     from docx import Document
@@ -17,6 +19,7 @@ NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 NS_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
+NS_WP14 = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 
 # Relationship types
@@ -27,6 +30,7 @@ REL_COMMENTS_EXT = (
 REL_COMMENTS_IDS = (
     "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds"
 )
+REL_PEOPLE = "http://schemas.microsoft.com/office/2011/relationships/people"
 
 # Content types
 CT_COMMENTS = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
@@ -36,6 +40,7 @@ CT_COMMENTS_EXT = (
 CT_COMMENTS_IDS = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml"
 )
+CT_PEOPLE = "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml"
 
 
 def _qn(ns: str, name: str) -> str:
@@ -413,3 +418,196 @@ class CommentsIdsPart:
         elem.set(_qn(NS_W16CID, "paraId"), para_id)
         elem.set(_qn(NS_W16CID, "durableId"), durable_id)
         self._save()
+
+
+class PeoplePart:
+    """Handler for word/people.xml part."""
+
+    def __init__(self, document: Document) -> None:
+        self._document = document
+        self._xml: Optional[etree._Element] = None
+
+    def _get_part(self):
+        """Get the people part from document relationships."""
+        for rel in self._document.part.rels.values():
+            if REL_PEOPLE in rel.reltype:
+                return rel.target_part
+        return None
+
+    def ensure_exists(self) -> None:
+        """Ensure the people part exists, creating if needed."""
+        if self._get_part() is None:
+            self._create_part()
+            self._xml = None
+
+    def _create_part(self) -> None:
+        """Create a new people.xml part."""
+        nsmap = {
+            "mc": NS_MC,
+            "w": NS_W,
+            "w14": NS_W14,
+            "w15": NS_W15,
+            "wp14": NS_WP14,
+        }
+        root = etree.Element(
+            _qn(NS_W15, "people"),
+            nsmap=nsmap,
+        )
+        root.set(_qn(NS_MC, "Ignorable"), "w14 w15 wp14")
+
+        xml_content = etree.tostring(
+            root,
+            xml_declaration=True,
+            encoding="UTF-8",
+            standalone="yes",
+        )
+
+        part = Part(
+            PackURI("/word/people.xml"),
+            CT_PEOPLE,
+            xml_content,
+            self._document.part.package,
+        )
+        self._document.part.relate_to(part, REL_PEOPLE)
+
+    @property
+    def xml(self) -> etree._Element:
+        """Get the XML root element."""
+        if self._xml is None:
+            part = self._get_part()
+            if part:
+                self._xml = etree.fromstring(part.blob)
+            else:
+                self._xml = etree.Element(_qn(NS_W15, "people"))
+        return self._xml
+
+    def _save(self) -> None:
+        """Save changes back to the part."""
+        part = self._get_part()
+        if part:
+            part._blob = etree.tostring(
+                self.xml,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            )
+
+    @staticmethod
+    def _attr_by_localname(elem: etree._Element, localname: str) -> Optional[str]:
+        for attr, value in elem.attrib.items():
+            try:
+                if etree.QName(attr).localname == localname:
+                    return value
+            except (ValueError, TypeError):
+                if attr == localname:
+                    return value
+        return None
+
+    @staticmethod
+    def _find_child_by_localname(
+        elem: etree._Element, localname: str
+    ) -> Optional[etree._Element]:
+        for child in elem:
+            if etree.QName(child).localname == localname:
+                return child
+        return None
+
+    def _person_info_from_elem(self, elem: etree._Element) -> PersonInfo:
+        author = self._attr_by_localname(elem, "author") or ""
+        presence_elem = self._find_child_by_localname(elem, "presenceInfo")
+        provider_id = user_id = None
+        if presence_elem is not None:
+            provider_id = self._attr_by_localname(presence_elem, "providerId")
+            user_id = self._attr_by_localname(presence_elem, "userId")
+        return PersonInfo(author=author, provider_id=provider_id, user_id=user_id)
+
+    def get_people(self) -> list[PersonInfo]:
+        """List people entries in people.xml."""
+        if self._get_part() is None:
+            return []
+        people: list[PersonInfo] = []
+        for elem in self.xml:
+            if etree.QName(elem).localname == "person":
+                people.append(self._person_info_from_elem(elem))
+        return people
+
+    def _find_person_elem(self, author: str) -> Optional[etree._Element]:
+        if self._get_part() is None:
+            return None
+        for elem in self.xml:
+            if etree.QName(elem).localname != "person":
+                continue
+            if self._attr_by_localname(elem, "author") == author:
+                return elem
+        return None
+
+    def get_person(self, author: str) -> PersonInfo:
+        """Return a person entry by author name."""
+        if not author:
+            raise ValueError("author must be non-empty")
+        elem = self._find_person_elem(author)
+        if elem is None:
+            raise KeyError(f"person '{author}' not found")
+        return self._person_info_from_elem(elem)
+
+    @staticmethod
+    def _normalize_presence(presence: dict[str, str]) -> tuple[str, str]:
+        provider_id = presence.get("provider_id") or presence.get("providerId")
+        user_id = presence.get("user_id") or presence.get("userId")
+        if not provider_id or not user_id:
+            raise ValueError("presence must include provider_id and user_id")
+        return provider_id, user_id
+
+    def ensure_person(
+        self, author: str, presence: Optional[dict[str, str]] = None
+    ) -> PersonInfo:
+        """Ensure a person entry exists, optionally adding presence metadata."""
+        if not author:
+            raise ValueError("author must be non-empty")
+
+        person_elem = self._find_person_elem(author)
+        if person_elem is None:
+            self.ensure_exists()
+            person_elem = etree.SubElement(self.xml, _qn(NS_W15, "person"))
+            person_elem.set(_qn(NS_W15, "author"), author)
+
+        if presence:
+            provider_id, user_id = self._normalize_presence(presence)
+            presence_elem = self._find_child_by_localname(person_elem, "presenceInfo")
+            if presence_elem is None:
+                presence_elem = etree.SubElement(person_elem, _qn(NS_W15, "presenceInfo"))
+            presence_elem.set(_qn(NS_W15, "providerId"), provider_id)
+            presence_elem.set(_qn(NS_W15, "userId"), user_id)
+
+        self._save()
+        return self._person_info_from_elem(person_elem)
+
+    def merge_from(
+        self, source: "PeoplePart", include_presence: bool = False
+    ) -> list[PersonInfo]:
+        """
+        Merge people entries from another document.
+
+        Existing authors are preserved; new authors are added.
+        """
+        if source._get_part() is None:
+            return []
+
+        existing_authors = {person.author for person in self.get_people()}
+        added: list[PersonInfo] = []
+
+        for person in source.get_people():
+            if not person.author or person.author in existing_authors:
+                continue
+
+            presence = None
+            if include_presence and person.provider_id and person.user_id:
+                presence = {
+                    "provider_id": person.provider_id,
+                    "user_id": person.user_id,
+                }
+
+            added.append(self.ensure_person(person.author, presence))
+            existing_authors.add(person.author)
+
+        return added

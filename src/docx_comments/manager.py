@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import os
 import random
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from lxml import etree
 
 from docx_comments.anchors import CommentAnchor
-from docx_comments.models import CommentInfo, CommentThread
+from docx_comments.models import CommentInfo, CommentThread, PersonInfo
+from docx_comments.system_author import _default_person_from_system
 from docx_comments.xml_parts import (
     CommentsExtendedPart,
     CommentsIdsPart,
     CommentsPart,
+    PeoplePart,
     ensure_comment_parts,
 )
 
@@ -28,6 +31,8 @@ NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 NS_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
+
+PersonSpec = PersonInfo | str | dict[str, Any] | bool
 
 
 def _qn(ns: str, name: str) -> str:
@@ -62,7 +67,7 @@ class CommentManager:
 
     Example:
         >>> from docx import Document
-        >>> from docx_comments import CommentManager
+        >>> from docx_comments import CommentManager, PersonInfo
         >>>
         >>> doc = Document("document.docx")
         >>> mgr = CommentManager(doc)
@@ -71,11 +76,15 @@ class CommentManager:
         >>> comment_id = mgr.add_comment(
         ...     paragraph=doc.paragraphs[0],
         ...     text="Review this",
-        ...     author="Reviewer"
+        ...     author=PersonInfo(author="Reviewer")
         ... )
         >>>
         >>> # Reply to comment
-        >>> reply_id = mgr.reply_to_comment(comment_id, "Fixed", "Author")
+        >>> reply_id = mgr.reply_to_comment(
+        ...     comment_id,
+        ...     "Fixed",
+        ...     PersonInfo(author="Author")
+        ... )
         >>>
         >>> doc.save("reviewed.docx")
     """
@@ -258,14 +267,206 @@ class CommentManager:
 
         return author, initials
 
+    def get_people(self) -> list[PersonInfo]:
+        """
+        List people entries from word/people.xml.
+
+        Returns:
+            List of PersonInfo entries. Empty if people.xml is absent.
+        """
+        people_part = PeoplePart(self._document)
+        return people_part.get_people()
+
+    def get_person(self, author: str) -> PersonInfo:
+        """
+        Get a single person entry by author name.
+
+        Args:
+            author: Author name to look up in people.xml.
+
+        Returns:
+            PersonInfo if found.
+
+        Raises:
+            KeyError: If no matching person is found.
+        """
+        people_part = PeoplePart(self._document)
+        return people_part.get_person(author)
+
+    def ensure_person(
+        self, author: str, presence: Optional[dict[str, str]] = None
+    ) -> PersonInfo:
+        """
+        Ensure a people.xml entry exists for an author.
+
+        Args:
+            author: Author name to match w:comment/@w:author.
+            presence: Optional presence metadata with provider_id/user_id.
+
+        Returns:
+            PersonInfo for the ensured entry.
+        """
+        people_part = PeoplePart(self._document)
+        return people_part.ensure_person(author, presence)
+
+    def _parse_author_spec(self, author: PersonInfo) -> tuple[str, Optional[dict[str, str]]]:
+        if not isinstance(author, PersonInfo):
+            raise TypeError("author must be a PersonInfo")
+
+        author_name = author.author
+        if not author_name:
+            raise ValueError("author must be non-empty")
+
+        presence = None
+        if author.provider_id and author.user_id:
+            presence = {
+                "provider_id": author.provider_id,
+                "user_id": author.user_id,
+            }
+        elif author.provider_id or author.user_id:
+            raise ValueError("author presence must include provider_id and user_id")
+
+        return author_name, presence
+
+    def _get_default_author_person(
+        self,
+        docx_path: Optional[str] = None,
+        include_presence: bool = False,
+        strict_docx: bool = False,
+    ) -> tuple[PersonInfo, Optional[str]]:
+        """
+        Internal helper to resolve a default author PersonInfo.
+
+        Preference order:
+        1) DOCX file from `docx_path` or env var DOCX_COMMENTS_AUTHOR_DOCX
+        2) System Office user info (macOS plist / Windows registry)
+        3) Current document core properties
+
+        Returns:
+            (PersonInfo, initials)
+
+        Raises:
+            ValueError: If no author can be resolved.
+        """
+        person, initials = _default_person_from_system(
+            docx_path=docx_path,
+            include_presence=include_presence,
+            strict_docx=strict_docx,
+        )
+        if person:
+            return person, initials
+
+        if strict_docx and (docx_path or os.environ.get("DOCX_COMMENTS_AUTHOR_DOCX")):
+            raise ValueError("default author DOCX did not yield an author")
+
+        author_name = self._document.core_properties.author or ""
+        if not author_name:
+            author_name = self._document.core_properties.last_modified_by or ""
+        if author_name:
+            return PersonInfo(author=author_name), None
+
+        raise ValueError("no default author could be resolved")
+
+    def get_default_author_person(
+        self,
+        docx_path: Optional[str] = None,
+        include_presence: bool = False,
+        strict_docx: bool = False,
+    ) -> tuple[PersonInfo, Optional[str]]:
+        """
+        Resolve a default author PersonInfo.
+
+        Args:
+            docx_path: Optional path to a DOCX file used as the author source.
+            include_presence: Whether to include presence metadata from people.xml.
+            strict_docx: If True and a DOCX source is provided (or env var set),
+                raise when the DOCX cannot provide an author, without falling back.
+                A DOCX with multiple people entries triggers a warning and falls back.
+
+        Returns:
+            (PersonInfo, initials)
+        """
+        return self._get_default_author_person(
+            docx_path=docx_path,
+            include_presence=include_presence,
+            strict_docx=strict_docx,
+        )
+
+    def merge_people_from(
+        self, source: Document, include_presence: bool = False
+    ) -> list[PersonInfo]:
+        """
+        Merge people entries from another document.
+
+        Args:
+            source: Document to import people.xml entries from.
+            include_presence: Whether to copy presence metadata.
+
+        Returns:
+            List of PersonInfo entries added to this document.
+        """
+        source_part = PeoplePart(source)
+        target_part = PeoplePart(self._document)
+        return target_part.merge_from(source_part, include_presence)
+
+    def _ensure_person_for_comment(
+        self,
+        author: str,
+        person: Optional[PersonSpec],
+    ) -> None:
+        if person is None or person is False:
+            return
+
+        if isinstance(person, bool):
+            if person:
+                self.ensure_person(author)
+            return
+
+        presence: Optional[dict[str, str]] = None
+        person_author = author
+
+        if isinstance(person, PersonInfo):
+            person_author = person.author
+            if person.provider_id and person.user_id:
+                presence = {
+                    "provider_id": person.provider_id,
+                    "user_id": person.user_id,
+                }
+        elif isinstance(person, str):
+            person_author = person
+        elif isinstance(person, dict):
+            if "author" in person and isinstance(person["author"], str):
+                person_author = person["author"]
+            raw_presence = person.get("presence")
+            if isinstance(raw_presence, dict):
+                presence = raw_presence  # type: ignore[assignment]
+            else:
+                provider_id = person.get("provider_id") or person.get("providerId")
+                user_id = person.get("user_id") or person.get("userId")
+                if provider_id and user_id:
+                    presence = {
+                        "provider_id": str(provider_id),
+                        "user_id": str(user_id),
+                    }
+                elif provider_id or user_id:
+                    raise ValueError("presence must include provider_id and user_id")
+        else:
+            raise TypeError("person must be a bool, str, dict, or PersonInfo")
+
+        if person_author != author:
+            raise ValueError("person author must match comment author to link identity")
+
+        self.ensure_person(person_author, presence)
+
     def add_comment(
         self,
         paragraph: Paragraph,
         text: str,
-        author: str,
+        author: PersonInfo,
         initials: Optional[str] = None,
         start_run: int = 0,
         end_run: Optional[int] = None,
+        person: Optional[PersonSpec] = None,
     ) -> str:
         """
         Add a new anchored comment to a paragraph.
@@ -273,18 +474,28 @@ class CommentManager:
         Args:
             paragraph: The paragraph to comment on.
             text: Comment text.
-            author: Author name.
+            author: PersonInfo instance.
             initials: Author initials (optional).
             start_run: Index of first run to anchor (default: 0).
             end_run: Index of last run to anchor (default: all runs).
+            person: Optional people.xml entry to link author identity.
 
         Returns:
             The comment ID of the new comment.
         """
+        author_name, author_presence = self._parse_author_spec(author)
+        person_spec = person
+        if person_spec is None and author_presence:
+            person_spec = {"presence": author_presence}
+        elif person_spec is True and author_presence:
+            person_spec = {"presence": author_presence}
+
         comment_id = _generate_id()
         para_id = _generate_para_id()
         text_id = _generate_para_id()
         durable_id = _generate_durable_id()
+
+        self._ensure_person_for_comment(author_name, person_spec)
 
         # 1. Add to comments.xml
         self._add_comment_xml(
@@ -292,7 +503,7 @@ class CommentManager:
             para_id=para_id,
             text_id=text_id,
             text=text,
-            author=author,
+            author=author_name,
             initials=initials,
         )
 
@@ -319,8 +530,9 @@ class CommentManager:
         self,
         parent_id: str,
         text: str,
-        author: str,
+        author: PersonInfo,
         initials: Optional[str] = None,
+        person: Optional[PersonSpec] = None,
     ) -> str:
         """
         Reply to an existing comment.
@@ -328,8 +540,9 @@ class CommentManager:
         Args:
             parent_id: Comment ID of the parent comment.
             text: Reply text.
-            author: Author name.
+            author: PersonInfo instance.
             initials: Author initials (optional).
+            person: Optional people.xml entry to link author identity.
 
         Returns:
             The comment ID of the reply.
@@ -355,10 +568,19 @@ class CommentManager:
         if not parent_paragraph:
             raise ValueError(f"Could not find anchor for parent comment {parent_id}")
 
+        author_name, author_presence = self._parse_author_spec(author)
+        person_spec = person
+        if person_spec is None and author_presence:
+            person_spec = {"presence": author_presence}
+        elif person_spec is True and author_presence:
+            person_spec = {"presence": author_presence}
+
         comment_id = _generate_id()
         para_id = _generate_para_id()
         text_id = _generate_para_id()
         durable_id = _generate_durable_id()
+
+        self._ensure_person_for_comment(author_name, person_spec)
 
         # 1. Add to comments.xml
         self._add_comment_xml(
@@ -366,7 +588,7 @@ class CommentManager:
             para_id=para_id,
             text_id=text_id,
             text=text,
-            author=author,
+            author=author_name,
             initials=initials,
         )
 

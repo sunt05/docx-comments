@@ -2,6 +2,6 @@
     "scripts": {
         "setup": "uv sync --all-extras",
         "run": "uv run pytest",
-        "archive": "cd $CONDUCTOR_ROOT_PATH && git fetch origin && git merge origin/main"
+        "archive": "cd $CONDUCTOR_ROOT_PATH && git stash push -u -m \"conductor-archive\" && git fetch origin && git checkout main && git pull --ff-only origin main"
     }
 }

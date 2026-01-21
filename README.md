@@ -23,6 +23,7 @@ This module provides complete OOXML comment manipulation based on ECMA-376 / ISO
 - Reply to existing comments (threaded)
 - Mark comments as resolved
 - Full Word Online compatibility
+- Optional people.xml identity linkage (Word account presence)
 
 ## Installation
 
@@ -34,10 +35,12 @@ pip install docx-comments
 
 ```python
 from docx import Document
-from docx_comments import CommentManager
+from docx_comments import CommentManager, PersonInfo
 
 doc = Document("document.docx")
 mgr = CommentManager(doc)
+
+# Author must be a PersonInfo object, not a raw string.
 
 # Add anchored comment to text range
 comment_id = mgr.add_comment(
@@ -45,15 +48,16 @@ comment_id = mgr.add_comment(
     start_run=0,
     end_run=2,
     text="Please review this section",
-    author="Reviewer Name",
-    initials="RN"
+    author=PersonInfo(author="Reviewer Name"),
+    initials="RN",
+    person=True,  # ensure people.xml entry exists for identity linkage
 )
 
 # Reply to existing comment
 reply_id = mgr.reply_to_comment(
     parent_id=comment_id,
     text="Addressed in this revision",
-    author="Author Name",
+    author=PersonInfo(author="Author Name"),
     initials="AN"
 )
 
@@ -69,14 +73,80 @@ for thread in mgr.get_comment_threads():
 doc.save("document_reviewed.docx")
 ```
 
+## Identity Linkage (people.xml)
+
+Word maps `w:comment/@w:author` to account identity using `word/people.xml`. By default, this library does
+not create or modify `people.xml` unless you opt in.
+
+```python
+# Create a minimal people.xml entry without presence metadata
+person = mgr.ensure_person("Reviewer Name")
+
+# Or fetch an existing person entry (raises if missing)
+try:
+    person = mgr.get_person("Reviewer Name")
+except KeyError:
+    person = mgr.ensure_person("Reviewer Name")
+
+# Resolve a default author from the system or a DOCX source
+person, initials = mgr.get_default_author_person()
+
+# Merge people.xml entries from another document (adds missing authors only)
+template_doc = Document("template.docx")
+mgr.merge_people_from(template_doc, include_presence=False)
+
+# Or request it when adding a comment
+mgr.add_comment(
+    paragraph=doc.paragraphs[0],
+    text="Linked to people.xml",
+    author=person,
+    person=True,
+)
+
+# You can also pass a PersonInfo object from an existing people.xml
+person = mgr.get_people()[0]
+mgr.add_comment(
+    paragraph=doc.paragraphs[0],
+    text="Author from PersonInfo",
+    author=person,
+)
+
+# Optional presence metadata (only if you explicitly supply it)
+mgr.ensure_person(
+    "Reviewer Name",
+    presence={"provider_id": "provider", "user_id": "user"},
+)
+```
+
+Note: Word comments are keyed by the author string (`w:comment/@w:author`). If two people share
+the same name string, Word does not provide a separate comment author ID to disambiguate them.
+Using `people.xml` presence metadata can improve account linkage, but cannot fully resolve
+same-name conflicts.
+
+You can also point the resolver at a known DOCX (kept private) using an environment variable:
+
+```bash
+export DOCX_COMMENTS_AUTHOR_DOCX="/path/to/author-source.docx"
+```
+
+Then call:
+
+```python
+person, initials = mgr.get_default_author_person(include_presence=True)
+```
+
+If the DOCX contains more than one `w15:person` entry, a warning is raised and the resolver
+falls back to system user info.
+
 ## OOXML Parts Handled
 
-This module manages four XML parts:
+This module manages five XML parts:
 
 1. **comments.xml** - Comment content and metadata
 2. **document.xml** - Anchors (`commentRangeStart/End`, `commentReference`)
 3. **commentsExtended.xml** - Threading (`paraId`, `paraIdParent`, `done`)
 4. **commentsIds.xml** - Durable IDs for persistence
+5. **people.xml** - Optional identity linkage (`w15:person`)
 
 ## Requirements
 
