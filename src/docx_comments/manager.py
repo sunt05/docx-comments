@@ -6,7 +6,7 @@ import os
 import random
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
 
 from lxml import etree
 
@@ -33,7 +33,7 @@ NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 NS_W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 NS_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
 
-PersonSpec = PersonInfo | str | dict[str, Any] | bool
+PersonSpec = Union[PersonInfo, str, dict[str, Any], bool]
 
 
 def _qn(ns: str, name: str) -> str:

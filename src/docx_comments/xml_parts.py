@@ -48,7 +48,6 @@ CT_PEOPLE = "application/vnd.openxmlformats-officedocument.wordprocessingml.peop
 CT_COMMENTS_EXTENSIBLE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml"
 )
-CT_PEOPLE = "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml"
 
 
 def _qn(ns: str, name: str) -> str:
