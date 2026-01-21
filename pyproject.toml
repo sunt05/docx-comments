@@ -1,6 +1,6 @@
 [project]
 name = "docx-comments"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Complete Word document comment manipulation with threading and Word Online compatibility"
 readme = "README.md"
 license = {text = "MIT"}
@@ -42,11 +42,14 @@ Repository = "https://github.com/sunt05/docx-comments"
 Issues = "https://github.com/sunt05/docx-comments/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/docx_comments"]
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
