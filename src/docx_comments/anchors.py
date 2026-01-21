@@ -264,12 +264,10 @@ class CommentAnchor:
         new_start.set(_qn(NS_W, "id"), new_comment_id)
         insert_start_after.addnext(new_start)
 
-        # Insert new end after the last end/reference in the group.
+        # Insert new end after the last commentRangeEnd in the group.
         insert_end_after = parent_end
         sibling = parent_end.getnext()
-        while sibling is not None and (
-            etree.QName(sibling).localname == "commentRangeEnd" or is_comment_ref_run(sibling)
-        ):
+        while sibling is not None and etree.QName(sibling).localname == "commentRangeEnd":
             insert_end_after = sibling
             sibling = sibling.getnext()
 
@@ -277,11 +275,16 @@ class CommentAnchor:
         new_end.set(_qn(NS_W, "id"), new_comment_id)
         insert_end_after.addnext(new_end)
 
-        # Add reference run
+        # Add reference run after existing commentReference runs (if any).
         ref_run = etree.Element(_qn(NS_W, "r"))
         ref = etree.SubElement(ref_run, _qn(NS_W, "commentReference"))
         ref.set(_qn(NS_W, "id"), new_comment_id)
-        new_end.addnext(ref_run)
+        insert_ref_after = new_end
+        sibling = new_end.getnext()
+        while sibling is not None and is_comment_ref_run(sibling):
+            insert_ref_after = sibling
+            sibling = sibling.getnext()
+        insert_ref_after.addnext(ref_run)
 
     def find_paragraph_with_comment(self, comment_id: str) -> Optional[Paragraph]:
         """

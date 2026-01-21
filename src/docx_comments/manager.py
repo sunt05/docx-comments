@@ -208,7 +208,11 @@ class CommentManager:
                 )
 
             durable_id = durable_ids.get(primary_para_id)
-            if durable_id and durable_id not in extensible_info:
+            ext_entry = extensible_info.get(durable_id) if durable_id else None
+            if durable_id and (
+                durable_id not in extensible_info
+                or not (ext_entry or {}).get("date_utc")
+            ):
                 date_str = comment_elem.get(_qn(NS_W, "date"))
                 timestamp = _parse_comment_date(date_str)
                 date_utc = _format_utc(timestamp) if timestamp else None

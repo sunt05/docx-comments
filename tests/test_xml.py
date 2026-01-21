@@ -160,6 +160,49 @@ class TestWordOnlineCompatibility:
         assert range_end.get(f"{{{ns_w}}}id") == comment_id
         assert comment_ref.get(f"{{{ns_w}}}id") == comment_id
 
+    def test_reply_anchor_ordering(self, tmp_path):
+        """Ensure reply anchors keep commentRangeEnd before commentReference runs."""
+        from lxml import etree
+        from zipfile import ZipFile
+
+        doc = Document()
+        para = doc.add_paragraph("This is test text to comment on.")
+        mgr = CommentManager(doc)
+
+        root_id = mgr.add_comment(para, "Root comment", "Author")
+        mgr.reply_to_comment(root_id, "Reply comment", "Author2")
+
+        output_path = tmp_path / "test_reply_anchor_order.docx"
+        doc.save(str(output_path))
+
+        with ZipFile(str(output_path), "r") as zf:
+            xml = etree.fromstring(zf.read("word/document.xml"))
+
+        ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        range_start = xml.find(
+            f".//{{{ns_w}}}commentRangeStart[@{{{ns_w}}}id='{root_id}']"
+        )
+        assert range_start is not None
+
+        para_elem = range_start.getparent()
+        children = list(para_elem)
+
+        end_indices = [
+            idx
+            for idx, child in enumerate(children)
+            if etree.QName(child).localname == "commentRangeEnd"
+        ]
+        ref_indices = [
+            idx
+            for idx, child in enumerate(children)
+            if etree.QName(child).localname == "r"
+            and child.find(f"{{{ns_w}}}commentReference") is not None
+        ]
+
+        assert end_indices, "commentRangeEnd elements not found"
+        assert ref_indices, "commentReference runs not found"
+        assert max(end_indices) < min(ref_indices)
+
     def test_full_roundtrip(self, tmp_path):
         """Test full save/reload roundtrip with all features."""
         doc = Document()

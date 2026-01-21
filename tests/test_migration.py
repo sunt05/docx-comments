@@ -46,3 +46,51 @@ class TestCommentMigration:
         assert text_id is not None
         assert para_id in CommentsExtendedPart(doc).get_threading_info()
         assert para_id in CommentsIdsPart(doc).get_durable_ids()
+
+    def test_migrate_comment_extensible_date_utc(self):
+        """Test backfilling missing dateUtc in commentsExtensible.xml."""
+        from lxml import etree
+
+        from docx_comments.xml_parts import CommentsExtensiblePart, CommentsIdsPart
+
+        doc = Document()
+        para = doc.add_paragraph("Text with comment")
+        mgr = CommentManager(doc)
+        mgr.add_comment(para, "Comment", "Author")
+
+        ids_part = CommentsIdsPart(doc)
+        durable_ids = ids_part.get_durable_ids()
+        assert durable_ids
+        durable_id = next(iter(durable_ids.values()))
+
+        ext_part = CommentsExtensiblePart(doc)
+        ns_w16cex = "http://schemas.microsoft.com/office/word/2018/wordml/cex"
+        date_attr = f"{{{ns_w16cex}}}dateUtc"
+        durable_attr = f"{{{ns_w16cex}}}durableId"
+
+        removed = False
+        for elem in ext_part.xml:
+            if (
+                etree.QName(elem).localname == "commentExtensible"
+                and elem.get(durable_attr) == durable_id
+            ):
+                if date_attr in elem.attrib:
+                    elem.attrib.pop(date_attr, None)
+                    removed = True
+                break
+        assert removed
+        ext_part._save()
+
+        # Run migration and ensure dateUtc is restored.
+        mgr.migrate_comment_metadata()
+
+        ext_part = CommentsExtensiblePart(doc)
+        for elem in ext_part.xml:
+            if (
+                etree.QName(elem).localname == "commentExtensible"
+                and elem.get(durable_attr) == durable_id
+            ):
+                assert elem.get(date_attr) is not None
+                break
+        else:
+            raise AssertionError("commentExtensible entry not found")
