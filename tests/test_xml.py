@@ -2,7 +2,11 @@
 
 from docx import Document
 
-from docx_comments import CommentManager
+from docx_comments import CommentManager, PersonInfo
+
+
+def author_obj(name: str) -> PersonInfo:
+    return PersonInfo(author=name)
 
 
 class TestWordOnlineCompatibility:
@@ -17,7 +21,7 @@ class TestWordOnlineCompatibility:
         mgr = CommentManager(doc)
 
         # Add a comment
-        mgr.add_comment(para, "Test comment", "Author")
+        mgr.add_comment(para, "Test comment", author_obj("Author"))
 
         # Save document
         output_path = tmp_path / "test_parts.docx"
@@ -40,7 +44,7 @@ class TestWordOnlineCompatibility:
         mgr = CommentManager(doc)
 
         comment_id = mgr.add_comment(
-            para, "Review this section", "Reviewer", initials="R"
+            para, "Review this section", author_obj("Reviewer"), initials="R"
         )
 
         output_path = tmp_path / "test_comments_xml.docx"
@@ -72,8 +76,8 @@ class TestWordOnlineCompatibility:
         mgr = CommentManager(doc)
 
         # Add root comment and reply
-        root_id = mgr.add_comment(para, "Root comment", "Author1")
-        reply_id = mgr.reply_to_comment(root_id, "Reply comment", "Author2")
+        root_id = mgr.add_comment(para, "Root comment", author_obj("Author1"))
+        mgr.reply_to_comment(root_id, "Reply comment", author_obj("Author2"))
 
         output_path = tmp_path / "test_threading.docx"
         doc.save(str(output_path))
@@ -113,7 +117,7 @@ class TestWordOnlineCompatibility:
         para = doc.add_paragraph("Test text")
         mgr = CommentManager(doc)
 
-        comment_id = mgr.add_comment(para, "Comment to resolve", "Author")
+        comment_id = mgr.add_comment(para, "Comment to resolve", author_obj("Author"))
         mgr.resolve_comment(comment_id)
 
         output_path = tmp_path / "test_resolved.docx"
@@ -136,7 +140,7 @@ class TestWordOnlineCompatibility:
         para = doc.add_paragraph("This is test text to comment on.")
         mgr = CommentManager(doc)
 
-        comment_id = mgr.add_comment(para, "Test comment", "Author")
+        comment_id = mgr.add_comment(para, "Test comment", author_obj("Author"))
 
         output_path = tmp_path / "test_anchors.docx"
         doc.save(str(output_path))
@@ -169,8 +173,8 @@ class TestWordOnlineCompatibility:
         para = doc.add_paragraph("This is test text to comment on.")
         mgr = CommentManager(doc)
 
-        root_id = mgr.add_comment(para, "Root comment", "Author")
-        mgr.reply_to_comment(root_id, "Reply comment", "Author2")
+        root_id = mgr.add_comment(para, "Root comment", author_obj("Author"))
+        mgr.reply_to_comment(root_id, "Reply comment", author_obj("Author2"))
 
         output_path = tmp_path / "test_reply_anchor_order.docx"
         doc.save(str(output_path))
@@ -211,9 +215,9 @@ class TestWordOnlineCompatibility:
         mgr = CommentManager(doc)
 
         # Add various comments
-        id1 = mgr.add_comment(para1, "Comment on first para", "Alice", "A")
-        id2 = mgr.add_comment(para2, "Comment on second para", "Bob", "B")
-        id3 = mgr.reply_to_comment(id1, "Reply to Alice", "Charlie", "C")
+        id1 = mgr.add_comment(para1, "Comment on first para", author_obj("Alice"), "A")
+        id2 = mgr.add_comment(para2, "Comment on second para", author_obj("Bob"), "B")
+        mgr.reply_to_comment(id1, "Reply to Alice", author_obj("Charlie"), "C")
         mgr.resolve_comment(id2)
 
         # Save

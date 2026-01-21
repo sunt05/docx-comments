@@ -2,7 +2,13 @@
 
 from docx import Document
 
-from docx_comments import CommentManager
+import pytest
+
+from docx_comments import CommentManager, PersonInfo
+
+
+def author_obj(name: str) -> PersonInfo:
+    return PersonInfo(author=name)
 
 
 class TestCommentManagerBasic:
@@ -32,7 +38,7 @@ class TestCommentManagerBasic:
         comment_id = mgr.add_comment(
             paragraph=para,
             text="This is a test comment",
-            author="Test Author",
+            author=author_obj("Test Author"),
             initials="TA",
         )
 
@@ -56,6 +62,26 @@ class TestCommentManagerBasic:
         comments2 = list(mgr2.list_comments())
         assert len(comments2) == 1
 
+    def test_add_comment_rejects_non_personinfo_author(self):
+        """Author must be PersonInfo."""
+        doc = Document()
+        para = doc.add_paragraph("This is test text to comment on.")
+        mgr = CommentManager(doc)
+
+        with pytest.raises(TypeError):
+            mgr.add_comment(
+                paragraph=para,
+                text="This is a test comment",
+                author="Test Author",
+            )
+
+        with pytest.raises(TypeError):
+            mgr.add_comment(
+                paragraph=para,
+                text="This is a test comment",
+                author={"author": "Test Author"},
+            )
+
     def test_resolve_comment(self):
         """Test marking a comment as resolved."""
         doc = Document()
@@ -65,7 +91,7 @@ class TestCommentManagerBasic:
         comment_id = mgr.add_comment(
             paragraph=para,
             text="Comment to resolve",
-            author="Author",
+            author=author_obj("Author"),
         )
 
         # Initially not resolved
@@ -87,12 +113,12 @@ class TestCommentManagerBasic:
         mgr = CommentManager(doc)
 
         # Add two independent comments
-        id1 = mgr.add_comment(para1, "Comment 1", "Author1")
-        id2 = mgr.add_comment(para2, "Comment 2", "Author2")
+        id1 = mgr.add_comment(para1, "Comment 1", author_obj("Author1"))
+        id2 = mgr.add_comment(para2, "Comment 2", author_obj("Author2"))
 
         # Add replies to first comment
-        mgr.reply_to_comment(id1, "Reply 1a", "Author3")
-        mgr.reply_to_comment(id1, "Reply 1b", "Author4")
+        mgr.reply_to_comment(id1, "Reply 1a", author_obj("Author3"))
+        mgr.reply_to_comment(id1, "Reply 1b", author_obj("Author4"))
 
         threads = mgr.get_comment_threads()
         assert len(threads) == 2

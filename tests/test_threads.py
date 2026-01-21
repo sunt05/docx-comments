@@ -2,7 +2,11 @@
 
 from docx import Document
 
-from docx_comments import CommentManager
+from docx_comments import CommentManager, PersonInfo
+
+
+def author_obj(name: str) -> PersonInfo:
+    return PersonInfo(author=name)
 
 
 class TestCommentThreads:
@@ -18,14 +22,14 @@ class TestCommentThreads:
         root_id = mgr.add_comment(
             paragraph=para,
             text="Root comment",
-            author="Author1",
+            author=author_obj("Author1"),
         )
 
         # Add reply
         reply_id = mgr.reply_to_comment(
             parent_id=root_id,
             text="Reply comment",
-            author="Author2",
+            author=author_obj("Author2"),
         )
 
         assert reply_id != root_id
@@ -43,9 +47,9 @@ class TestCommentThreads:
         para = doc.add_paragraph("Threaded comment text.")
         mgr = CommentManager(doc)
 
-        root_id = mgr.add_comment(para, "Root comment", "Author1")
-        reply1_id = mgr.reply_to_comment(root_id, "Reply 1", "Author2")
-        reply2_id = mgr.reply_to_comment(reply1_id, "Reply 2", "Author3")
+        root_id = mgr.add_comment(para, "Root comment", author_obj("Author1"))
+        reply1_id = mgr.reply_to_comment(root_id, "Reply 1", author_obj("Author2"))
+        reply2_id = mgr.reply_to_comment(reply1_id, "Reply 2", author_obj("Author3"))
 
         comments = list(mgr.list_comments())
         reply2 = next(c for c in comments if c.comment_id == reply2_id)
@@ -65,8 +69,8 @@ class TestCommentThreads:
         cell_para.add_run("Cell text")
         mgr = CommentManager(doc)
 
-        root_id = mgr.add_comment(cell_para, "Table comment", "Author1")
-        reply_id = mgr.reply_to_comment(root_id, "Reply to table", "Author2")
+        root_id = mgr.add_comment(cell_para, "Table comment", author_obj("Author1"))
+        reply_id = mgr.reply_to_comment(root_id, "Reply to table", author_obj("Author2"))
 
         assert reply_id != root_id
 
@@ -78,8 +82,8 @@ class TestCommentThreads:
         header_para.add_run("Header text")
         mgr = CommentManager(doc)
 
-        root_id = mgr.add_comment(header_para, "Header comment", "Author1")
-        reply_id = mgr.reply_to_comment(root_id, "Reply to header", "Author2")
+        root_id = mgr.add_comment(header_para, "Header comment", author_obj("Author1"))
+        reply_id = mgr.reply_to_comment(root_id, "Reply to header", author_obj("Author2"))
 
         assert reply_id != root_id
 
@@ -96,14 +100,14 @@ class TestCommentThreads:
 
         mgr = CommentManager(doc)
 
-        root_body = mgr.add_comment(para1, "Root body", "Author1")
-        root_table = mgr.add_comment(table_para, "Root table", "Author2")
-        root_header = mgr.add_comment(header_para, "Root header", "Author3")
+        root_body = mgr.add_comment(para1, "Root body", author_obj("Author1"))
+        root_table = mgr.add_comment(table_para, "Root table", author_obj("Author2"))
+        root_header = mgr.add_comment(header_para, "Root header", author_obj("Author3"))
 
-        reply_body_1 = mgr.reply_to_comment(root_body, "Body reply 1", "Author4")
-        reply_body_2 = mgr.reply_to_comment(reply_body_1, "Body reply 2", "Author5")
-        mgr.reply_to_comment(root_table, "Table reply 1", "Author6")
-        mgr.reply_to_comment(root_header, "Header reply 1", "Author7")
+        reply_body_1 = mgr.reply_to_comment(root_body, "Body reply 1", author_obj("Author4"))
+        reply_body_2 = mgr.reply_to_comment(reply_body_1, "Body reply 2", author_obj("Author5"))
+        mgr.reply_to_comment(root_table, "Table reply 1", author_obj("Author6"))
+        mgr.reply_to_comment(root_header, "Header reply 1", author_obj("Author7"))
 
         output_path = tmp_path / "multi_thread_roundtrip.docx"
         doc.save(str(output_path))

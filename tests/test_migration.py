@@ -2,7 +2,11 @@
 
 from docx import Document
 
-from docx_comments import CommentManager
+from docx_comments import CommentManager, PersonInfo
+
+
+def author_obj(name: str) -> PersonInfo:
+    return PersonInfo(author=name)
 
 
 class TestCommentMigration:
@@ -15,7 +19,7 @@ class TestCommentMigration:
         doc = Document()
         para = doc.add_paragraph("Text with comment")
         mgr = CommentManager(doc)
-        mgr.add_comment(para, "Comment", "Author")
+        mgr.add_comment(para, "Comment", author_obj("Author"))
 
         # Remove paraId/textId from comments.xml
         ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -56,7 +60,7 @@ class TestCommentMigration:
         doc = Document()
         para = doc.add_paragraph("Text with comment")
         mgr = CommentManager(doc)
-        mgr.add_comment(para, "Comment", "Author")
+        mgr.add_comment(para, "Comment", author_obj("Author"))
 
         ids_part = CommentsIdsPart(doc)
         durable_ids = ids_part.get_durable_ids()
