@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-21
+
+### Changed
+
+- Switch to git tag-based versioning via hatch-vcs
+
 ## [0.1.0] - 2025-01-09
 
 ### Added
@@ -27,5 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `commentsExtended.xml` - Threading (paraId, paraIdParent, done)
   - `commentsIds.xml` - Durable IDs
 
-[Unreleased]: https://github.com/sunt05/docx-comments/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sunt05/docx-comments/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sunt05/docx-comments/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sunt05/docx-comments/releases/tag/v0.1.0

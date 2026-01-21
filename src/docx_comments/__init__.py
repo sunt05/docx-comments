@@ -8,8 +8,13 @@ This module provides full OOXML comment support including:
 - Full Word Online compatibility
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from docx_comments.manager import CommentManager
 from docx_comments.models import CommentInfo, CommentThread
 
-__version__ = "0.1.0"
+try:
+    __version__ = version("docx-comments")
+except PackageNotFoundError:  # pragma: no cover - local checkout without metadata
+    __version__ = "0.0.0"
 __all__ = ["CommentManager", "CommentThread", "CommentInfo"]
