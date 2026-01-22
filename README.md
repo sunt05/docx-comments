@@ -22,6 +22,9 @@ This module provides complete OOXML comment manipulation based on ECMA-376 / ISO
 - Add anchored comments to specific text ranges
 - Reply to existing comments (threaded)
 - Mark comments as resolved
+- Unresolve comments and toggle done status
+- Delete comments or entire threads
+- Move comment anchors to new locations
 - Full Word Online compatibility
 - Optional people.xml identity linkage (Word account presence)
 
@@ -63,6 +66,18 @@ reply_id = mgr.reply_to_comment(
 
 # Mark comment as resolved
 mgr.resolve_comment(comment_id)
+
+# Mark comment as unresolved
+mgr.unresolve_comment(comment_id)
+
+# Move a comment to a new paragraph
+mgr.move_comment(
+    comment_id=comment_id,
+    paragraph=doc.paragraphs[1],
+)
+
+# Delete a comment thread (root + replies)
+mgr.delete_thread(comment_id)
 
 # List all comment threads
 for thread in mgr.get_comment_threads():

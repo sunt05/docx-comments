@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `unresolve_comment()` and `set_comment_resolved()` for toggling done status
+- `delete_comment()` and `delete_thread()` for removing comments and threads
+- `move_comment()` and `move_thread()` for re-anchoring comments
+
 ## [0.2.0] - 2026-01-21
 
 ### Added
