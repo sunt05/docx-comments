@@ -2,6 +2,6 @@
     "scripts": {
         "setup": "uv sync --all-extras",
         "run": "uv run pytest",
-        "archive": "cd $CONDUCTOR_ROOT_PATH && (git merge --abort >/dev/null 2>&1 || true) && ((git diff --quiet && git diff --cached --quiet) || git stash push -u -m \"conductor-archive\") && git fetch origin && git merge origin/main"
+        "archive": "cd $CONDUCTOR_ROOT_PATH && (git merge --abort >/dev/null 2>&1 || true) && ((git diff --quiet && git diff --cached --quiet) || git stash push -u -m \"conductor-archive\") && git fetch origin && (git merge origin/main --ff-only && echo \"✅ Synced with origin/main\") || (echo \"⚠️  Cannot fast-forward: main has diverged from origin/main\" && echo \"\" && echo \"Local commits not in origin:\" && git log --oneline main ^origin/main && echo \"\" && echo \"Options:\" && echo \"  1. Discard local: git reset --hard origin/main\" && echo \"  2. Push first:    git push origin main\" && exit 1)"
     }
 }
