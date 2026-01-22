@@ -173,6 +173,37 @@ class CommentsPart:
                 standalone="yes",
             )
 
+    def remove_comment(self, comment_id: str) -> Optional[list[str]]:
+        """
+        Remove a comment from comments.xml.
+
+        Args:
+            comment_id: Comment ID to remove.
+
+        Returns:
+            List of paraIds found on the removed comment, or None if not found.
+        """
+        removed_para_ids: list[str] = []
+        removed = False
+
+        for elem in list(self.xml):
+            if etree.QName(elem).localname != "comment":
+                continue
+            if elem.get(_qn(NS_W, "id")) != comment_id:
+                continue
+            for para in elem.findall(_qn(NS_W, "p")):
+                para_id = para.get(_qn(NS_W14, "paraId"))
+                if para_id:
+                    removed_para_ids.append(para_id)
+            elem.getparent().remove(elem)
+            removed = True
+
+        if removed:
+            self._save()
+            return removed_para_ids
+
+        return None
+
 
 def ensure_comment_parts(document: Document) -> None:
     """
@@ -342,6 +373,52 @@ class CommentsExtendedPart:
                     return
         raise ValueError(f"Comment with para_id {para_id} not found in commentsExtended")
 
+    def set_parent(self, para_id: str, parent_para_id: Optional[str]) -> bool:
+        """
+        Update the parent paraId for a comment.
+
+        Args:
+            para_id: Paragraph ID of the comment.
+            parent_para_id: New parent paraId, or None to clear.
+
+        Returns:
+            True if an entry was updated, False otherwise.
+        """
+        for elem in self.xml:
+            if etree.QName(elem).localname != "commentEx":
+                continue
+            if elem.get(_qn(NS_W15, "paraId")) != para_id:
+                continue
+            if parent_para_id:
+                elem.set(_qn(NS_W15, "paraIdParent"), parent_para_id)
+            else:
+                elem.attrib.pop(_qn(NS_W15, "paraIdParent"), None)
+            self._save()
+            return True
+        return False
+
+    def remove_comment_ex(self, para_id: str) -> bool:
+        """
+        Remove a commentEx entry by paraId.
+
+        Args:
+            para_id: Paragraph ID of the comment.
+
+        Returns:
+            True if an entry was removed, False otherwise.
+        """
+        removed = False
+        for elem in list(self.xml):
+            if etree.QName(elem).localname != "commentEx":
+                continue
+            if elem.get(_qn(NS_W15, "paraId")) != para_id:
+                continue
+            elem.getparent().remove(elem)
+            removed = True
+        if removed:
+            self._save()
+        return removed
+
 
 class CommentsExtensiblePart:
     """Handler for word/commentsExtensible.xml part."""
@@ -457,6 +534,28 @@ class CommentsExtensiblePart:
             elem.set(_qn(NS_W16CEX, "dateUtc"), date_utc)
         self._save()
 
+    def remove_comment_extensible(self, durable_id: str) -> bool:
+        """
+        Remove a commentExtensible entry by durableId.
+
+        Args:
+            durable_id: Durable ID for the comment.
+
+        Returns:
+            True if an entry was removed, False otherwise.
+        """
+        removed = False
+        for elem in list(self.xml):
+            if etree.QName(elem).localname != "commentExtensible":
+                continue
+            if elem.get(_qn(NS_W16CEX, "durableId")) != durable_id:
+                continue
+            elem.getparent().remove(elem)
+            removed = True
+        if removed:
+            self._save()
+        return removed
+
 
 class CommentsIdsPart:
     """Handler for word/commentsIds.xml part."""
@@ -557,6 +656,30 @@ class CommentsIdsPart:
         elem.set(_qn(NS_W16CID, "paraId"), para_id)
         elem.set(_qn(NS_W16CID, "durableId"), durable_id)
         self._save()
+
+    def remove_comment_id(self, para_id: str) -> Optional[str]:
+        """
+        Remove a commentId entry by paraId.
+
+        Args:
+            para_id: Paragraph ID of the comment.
+
+        Returns:
+            The durableId removed, or None if not found.
+        """
+        removed_durable_id = None
+        removed = False
+        for elem in list(self.xml):
+            if etree.QName(elem).localname != "commentId":
+                continue
+            if elem.get(_qn(NS_W16CID, "paraId")) != para_id:
+                continue
+            removed_durable_id = elem.get(_qn(NS_W16CID, "durableId"))
+            elem.getparent().remove(elem)
+            removed = True
+        if removed:
+            self._save()
+        return removed_durable_id
 
 
 class PeoplePart:
